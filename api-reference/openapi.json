@@ -1,0 +1,439 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Tranzor Acquiring API",
+    "description": "API для приёма криптовалютных платежей. Создавайте инвойсы, отслеживайте статусы и получайте вебхуки о платежах.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Tranzor Support",
+      "url": "https://tranzor.io"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://sand.tranzor.io",
+      "description": "Sandbox"
+    }
+  ],
+  "security": [
+    { "BearerAuth": [] },
+    { "HmacAuth": [] }
+  ],
+  "paths": {
+    "/api/v1/invoices": {
+      "post": {
+        "summary": "Создать инвойс",
+        "description": "Создаёт новый платёжный инвойс. Возвращает адреса для оплаты и ссылку на страницу оплаты.",
+        "operationId": "createInvoice",
+        "tags": ["Invoices"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvoiceRequest"
+              },
+              "example": {
+                "amount": 10.50,
+                "currency": "USD",
+                "description": "Заказ #1234",
+                "orderId": "order-1234",
+                "metadata": "{\"userId\": 42}"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Инвойс создан",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateInvoiceResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "get": {
+        "summary": "Список инвойсов",
+        "description": "Возвращает список инвойсов с пагинацией и фильтрами.",
+        "operationId": "listInvoices",
+        "tags": ["Invoices"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["PENDING", "PAID", "EXPIRED", "CANCELLED"] },
+            "description": "Фильтр по статусу"
+          },
+          {
+            "name": "orderId",
+            "in": "query",
+            "schema": { "type": "string" },
+            "description": "Поиск по вашему orderId"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 20, "maximum": 100 },
+            "description": "Количество записей"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": { "type": "integer", "default": 0 },
+            "description": "Смещение"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список инвойсов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListInvoicesResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/invoices/{invoiceId}": {
+      "get": {
+        "summary": "Получить инвойс",
+        "description": "Возвращает полную информацию об инвойсе, включая адреса для оплаты и данные о платеже.",
+        "operationId": "getInvoice",
+        "tags": ["Invoices"],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Данные инвойса",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetInvoiceResponse"
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "delete": {
+        "summary": "Отменить инвойс",
+        "description": "Отменяет PENDING инвойс. Нельзя отменить оплаченный или истёкший инвойс.",
+        "operationId": "cancelInvoice",
+        "tags": ["Invoices"],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Инвойс отменён",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "invoiceId": { "type": "string" },
+                        "status": { "type": "string", "example": "CANCELLED" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/store": {
+      "get": {
+        "summary": "Информация о магазине",
+        "description": "Возвращает данные магазина и статистику по инвойсам.",
+        "operationId": "getStore",
+        "tags": ["Store"],
+        "responses": {
+          "200": {
+            "description": "Данные магазина",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreInfoResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API ключ в формате `trz_...`"
+      },
+      "HmacAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "HMAC аутентификация. Требуются заголовки:\n- `X-API-Key` — ваш API ключ\n- `X-Timestamp` — текущий unix timestamp (секунды, ±5 мин)\n- `X-Signature` — HMAC-SHA256 подпись\n\nСтрока для подписи: `{timestamp}{METHOD}{path}{body}`\nКлюч подписи: `Secret Key` (выдаётся при создании API ключа)"
+      }
+    },
+    "schemas": {
+      "CreateInvoiceRequest": {
+        "type": "object",
+        "required": ["amount"],
+        "properties": {
+          "amount": { "type": "number", "minimum": 0.01, "maximum": 1000000, "description": "Сумма в USD" },
+          "currency": { "type": "string", "enum": ["USD"], "default": "USD" },
+          "description": { "type": "string", "maxLength": 500, "description": "Описание платежа" },
+          "orderId": { "type": "string", "maxLength": 200, "description": "Ваш ID заказа (уникальный)" },
+          "metadata": { "type": "string", "maxLength": 2000, "description": "Произвольные данные" }
+        }
+      },
+      "PaymentAddress": {
+        "type": "object",
+        "properties": {
+          "chain": { "type": "string", "example": "ethereum" },
+          "address": { "type": "string", "example": "0x..." },
+          "expectedAmount": { "type": "string", "description": "Ожидаемая сумма в минимальных единицах" },
+          "isToken": { "type": "boolean" },
+          "tokenSymbol": { "type": "string", "nullable": true, "example": "USDT" }
+        }
+      },
+      "InvoicePayment": {
+        "type": "object",
+        "properties": {
+          "chain": { "type": "string", "example": "tron:USDT" },
+          "amount": { "type": "string" },
+          "txHash": { "type": "string", "nullable": true },
+          "paidAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateInvoiceResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "data": {
+            "type": "object",
+            "properties": {
+              "invoiceId": { "type": "string" },
+              "payUrl": { "type": "string", "format": "uri", "description": "Ссылка на страницу оплаты" },
+              "status": { "type": "string", "enum": ["PENDING"] },
+              "amount": { "type": "number", "example": 10.50 },
+              "currency": { "type": "string", "example": "USD" },
+              "orderId": { "type": "string", "nullable": true },
+              "addresses": { "type": "array", "items": { "$ref": "#/components/schemas/PaymentAddress" } },
+              "expiresAt": { "type": "string", "format": "date-time" },
+              "createdAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "ListInvoicesResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "invoices": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "amount": { "type": "number" },
+                    "currency": { "type": "string" },
+                    "status": { "type": "string", "enum": ["PENDING", "PAID", "EXPIRED", "CANCELLED"] },
+                    "orderId": { "type": "string", "nullable": true },
+                    "paidChain": { "type": "string", "nullable": true },
+                    "paidAt": { "type": "string", "format": "date-time", "nullable": true },
+                    "expiresAt": { "type": "string", "format": "date-time" },
+                    "createdAt": { "type": "string", "format": "date-time" }
+                  }
+                }
+              },
+              "pagination": {
+                "type": "object",
+                "properties": {
+                  "total": { "type": "integer" },
+                  "limit": { "type": "integer" },
+                  "offset": { "type": "integer" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "GetInvoiceResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "invoiceId": { "type": "string" },
+              "status": { "type": "string", "enum": ["PENDING", "PAID", "EXPIRED", "CANCELLED"] },
+              "amount": { "type": "number" },
+              "currency": { "type": "string" },
+              "orderId": { "type": "string", "nullable": true },
+              "description": { "type": "string", "nullable": true },
+              "metadata": { "type": "string", "nullable": true },
+              "addresses": { "type": "array", "items": { "$ref": "#/components/schemas/PaymentAddress" } },
+              "payment": { "$ref": "#/components/schemas/InvoicePayment", "nullable": true },
+              "expiresAt": { "type": "string", "format": "date-time" },
+              "createdAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      },
+      "StoreInfoResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "storeId": { "type": "string" },
+              "name": { "type": "string" },
+              "acceptedChains": { "type": "array", "items": { "type": "string" } },
+              "acceptedTokens": { "type": "array", "items": { "type": "string" } },
+              "paymentTimeoutMin": { "type": "integer" },
+              "webhookUrl": { "type": "string", "nullable": true },
+              "stats": {
+                "type": "object",
+                "properties": {
+                  "totalInvoices": { "type": "integer" },
+                  "paidInvoices": { "type": "integer" },
+                  "totalVolumeUsd": { "type": "number" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "WebhookPayload": {
+        "type": "object",
+        "description": "Тело вебхука. Подпись: HMAC-SHA256(webhookSecret, body) в заголовке X-Tranzor-Signature",
+        "properties": {
+          "event": { "type": "string", "enum": ["invoice.paid", "invoice.expired"] },
+          "invoiceId": { "type": "string" },
+          "orderId": { "type": "string", "nullable": true },
+          "amountUsd": { "type": "integer", "description": "Сумма в центах" },
+          "status": { "type": "string" },
+          "paidChain": { "type": "string", "nullable": true },
+          "paidAmount": { "type": "string", "nullable": true },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Невалидный запрос",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": false },
+                "error": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Не авторизован",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": false },
+                "error": { "type": "string", "example": "Invalid API key" }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Не найдено",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": false },
+                "error": { "type": "string", "example": "Invoice not found" }
+              }
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Внутренняя ошибка",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean", "example": false },
+                "error": { "type": "string", "example": "Internal server error" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "invoicePaid": {
+      "post": {
+        "summary": "Инвойс оплачен",
+        "description": "Отправляется на webhookUrl магазина при подтверждении платежа. Подпись в заголовке X-Tranzor-Signature.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WebhookPayload" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      }
+    }
+  }
+}

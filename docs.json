@@ -1,0 +1,102 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Tranzor Docs",
+  "colors": {
+    "primary": "#16A34A",
+    "light": "#07C983",
+    "dark": "#15803D"
+  },
+  "favicon": "/favicon.svg",
+  "openapi": ["/api-reference/openapi.json"],
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Руководство",
+        "groups": [
+          {
+            "group": "Начало работы",
+            "pages": [
+              "index",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Концепции",
+            "pages": [
+              "concepts/invoices",
+              "concepts/webhooks"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API",
+        "groups": [
+          {
+            "group": "Обзор",
+            "pages": [
+              "api-reference/introduction"
+            ]
+          },
+          {
+            "group": "Инвойсы",
+            "pages": [
+              "api-reference/endpoint/create-invoice",
+              "api-reference/endpoint/get-invoice",
+              "api-reference/endpoint/list-invoices",
+              "api-reference/endpoint/cancel-invoice"
+            ]
+          },
+          {
+            "group": "Магазин",
+            "pages": [
+              "api-reference/endpoint/get-store"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Документация",
+          "href": "https://docs.tranzor.io",
+          "icon": "book-open-cover"
+        },
+        {
+          "anchor": "Статус",
+          "href": "https://status.tranzor.io",
+          "icon": "signal"
+        }
+      ]
+    }
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Поддержка",
+        "href": "mailto:support@tranzor.io"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Личный кабинет",
+      "href": "https://app.tranzor.io"
+    }
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "claude",
+      "cursor"
+    ]
+  },
+  "footer": {}
+}

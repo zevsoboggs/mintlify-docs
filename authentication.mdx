@@ -1,0 +1,132 @@
+---
+title: "Аутентификация"
+description: "Как аутентифицировать запросы к Tranzor API"
+---
+
+Tranzor API поддерживает два способа аутентификации: **Bearer Token** и **HMAC-подпись**.
+
+## Bearer Token
+
+Самый простой способ — передайте API ключ в заголовке `Authorization`:
+
+```bash
+curl -H "Authorization: Bearer trz_your_api_key" \
+  https://sand.tranzor.io/api/v1/invoices
+```
+
+<Note>
+  Подходит для быстрой интеграции и тестирования. Для продакшена рекомендуется HMAC-подпись.
+</Note>
+
+## HMAC-подпись
+
+Более безопасный способ аутентификации, который защищает от перехвата и подмены запросов.
+
+### Необходимые заголовки
+
+| Заголовок | Описание |
+|-----------|----------|
+| `X-API-Key` | Ваш API ключ |
+| `X-Timestamp` | Текущий Unix timestamp в секундах |
+| `X-Signature` | HMAC-SHA256 подпись |
+
+### Формирование подписи
+
+Строка для подписи формируется по шаблону:
+
+```
+{timestamp}{METHOD}{path}{body}
+```
+
+- **timestamp** — значение из `X-Timestamp`
+- **METHOD** — HTTP метод заглавными буквами (`POST`, `GET`, `DELETE`)
+- **path** — путь запроса (например `/api/v1/invoices`)
+- **body** — тело запроса (пустая строка для GET/DELETE)
+
+Подпись вычисляется как `HMAC-SHA256(secretKey, signatureString)`.
+
+### Примеры
+
+<CodeGroup>
+```javascript Node.js
+import crypto from 'crypto';
+
+function signRequest(method, path, body, apiKey, secretKey) {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const bodyString = body ? JSON.stringify(body) : '';
+  const signatureString = `${timestamp}${method}${path}${bodyString}`;
+
+  const signature = crypto
+    .createHmac('sha256', secretKey)
+    .update(signatureString)
+    .digest('hex');
+
+  return {
+    'X-API-Key': apiKey,
+    'X-Timestamp': timestamp,
+    'X-Signature': signature,
+    'Content-Type': 'application/json',
+  };
+}
+```
+
+```python Python
+import hmac
+import hashlib
+import time
+import json
+
+def sign_request(method, path, body, api_key, secret_key):
+    timestamp = str(int(time.time()))
+    body_string = json.dumps(body) if body else ""
+    signature_string = f"{timestamp}{method}{path}{body_string}"
+
+    signature = hmac.new(
+        secret_key.encode(),
+        signature_string.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+    return {
+        "X-API-Key": api_key,
+        "X-Timestamp": timestamp,
+        "X-Signature": signature,
+        "Content-Type": "application/json",
+    }
+```
+
+```php PHP
+function signRequest($method, $path, $body, $apiKey, $secretKey) {
+    $timestamp = (string) time();
+    $bodyString = $body ? json_encode($body) : '';
+    $signatureString = $timestamp . $method . $path . $bodyString;
+
+    $signature = hash_hmac('sha256', $signatureString, $secretKey);
+
+    return [
+        'X-API-Key: ' . $apiKey,
+        'X-Timestamp: ' . $timestamp,
+        'X-Signature: ' . $signature,
+        'Content-Type: application/json',
+    ];
+}
+```
+</CodeGroup>
+
+### Валидация timestamp
+
+Сервер принимает запросы с timestamp, отличающимся от текущего времени не более чем на **5 минут**. Убедитесь, что время на вашем сервере синхронизировано (NTP).
+
+## Ошибки аутентификации
+
+| Код | Описание |
+|-----|----------|
+| `401` | Невалидный API ключ или подпись |
+| `401` | Истёкший timestamp (разница > 5 минут) |
+
+```json
+{
+  "success": false,
+  "error": "Invalid API key"
+}
+```

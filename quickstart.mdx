@@ -1,0 +1,163 @@
+---
+title: "Быстрый старт"
+description: "Создайте первый инвойс за 5 минут"
+---
+
+## Предварительные требования
+
+- Аккаунт в [Tranzor](https://app.tranzor.io)
+- API ключ (формат `trz_...`)
+
+## 1. Получите API ключ
+
+Перейдите в **Личный кабинет → Настройки → API ключи** и создайте новый ключ. Вы получите:
+
+- **API Key** — для аутентификации запросов
+- **Secret Key** — для HMAC-подписи (храните в безопасности!)
+
+## 2. Создайте инвойс
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://sand.tranzor.io/api/v1/invoices \
+  -H "Authorization: Bearer trz_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 10.50,
+    "currency": "USD",
+    "description": "Заказ #1234",
+    "orderId": "order-1234"
+  }'
+```
+
+```javascript Node.js
+const response = await fetch('https://sand.tranzor.io/api/v1/invoices', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer trz_your_api_key',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    amount: 10.50,
+    currency: 'USD',
+    description: 'Заказ #1234',
+    orderId: 'order-1234',
+  }),
+});
+
+const data = await response.json();
+console.log(data.data.payUrl); // Ссылка на страницу оплаты
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "https://sand.tranzor.io/api/v1/invoices",
+    headers={
+        "Authorization": "Bearer trz_your_api_key",
+        "Content-Type": "application/json",
+    },
+    json={
+        "amount": 10.50,
+        "currency": "USD",
+        "description": "Заказ #1234",
+        "orderId": "order-1234",
+    },
+)
+
+data = response.json()
+print(data["data"]["payUrl"])  # Ссылка на страницу оплаты
+```
+
+```php PHP
+$ch = curl_init('https://sand.tranzor.io/api/v1/invoices');
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        'Authorization: Bearer trz_your_api_key',
+        'Content-Type: application/json',
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        'amount' => 10.50,
+        'currency' => 'USD',
+        'description' => 'Заказ #1234',
+        'orderId' => 'order-1234',
+    ]),
+]);
+
+$response = json_decode(curl_exec($ch), true);
+echo $response['data']['payUrl']; // Ссылка на страницу оплаты
+```
+</CodeGroup>
+
+## 3. Ответ API
+
+```json
+{
+  "success": true,
+  "data": {
+    "invoiceId": "inv_abc123",
+    "payUrl": "https://pay.tranzor.io/inv_abc123",
+    "status": "PENDING",
+    "amount": 10.50,
+    "currency": "USD",
+    "orderId": "order-1234",
+    "addresses": [
+      {
+        "chain": "tron",
+        "address": "TXyz...",
+        "expectedAmount": "10500000",
+        "isToken": true,
+        "tokenSymbol": "USDT"
+      },
+      {
+        "chain": "ethereum",
+        "address": "0xAbc...",
+        "expectedAmount": "10500000",
+        "isToken": true,
+        "tokenSymbol": "USDT"
+      }
+    ],
+    "expiresAt": "2025-01-01T01:00:00Z",
+    "createdAt": "2025-01-01T00:00:00Z"
+  }
+}
+```
+
+## 4. Перенаправьте клиента
+
+Отправьте клиента на `payUrl` — он увидит страницу оплаты с адресами и QR-кодом. Или отобразите адреса из `addresses` в своём интерфейсе.
+
+## 5. Обработайте вебхук
+
+После оплаты Tranzor отправит POST-запрос на ваш `webhookUrl`:
+
+```json
+{
+  "event": "invoice.paid",
+  "invoiceId": "inv_abc123",
+  "orderId": "order-1234",
+  "amountUsd": 1050,
+  "status": "PAID",
+  "paidChain": "tron:USDT",
+  "paidAmount": "10500000",
+  "timestamp": "2025-01-01T00:05:00Z"
+}
+```
+
+<Warning>
+  Всегда проверяйте подпись вебхука через заголовок `X-Tranzor-Signature` перед обработкой. Подробнее в разделе [Вебхуки](/concepts/webhooks).
+</Warning>
+
+## Следующие шаги
+
+<CardGroup cols={2}>
+  <Card title="Аутентификация" icon="lock" href="/authentication">
+    HMAC-подпись и Bearer-токен
+  </Card>
+  <Card title="Инвойсы" icon="file-invoice" href="/concepts/invoices">
+    Жизненный цикл и статусы
+  </Card>
+</CardGroup>

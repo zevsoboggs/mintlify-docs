@@ -1,0 +1,118 @@
+---
+title: "Вебхуки"
+description: "Получайте уведомления о событиях в реальном времени"
+---
+
+Вебхуки позволяют вашему серверу получать уведомления о событиях (оплата, истечение инвойса) в реальном времени.
+
+## Настройка
+
+Укажите `webhookUrl` в настройках магазина в [личном кабинете](https://app.tranzor.io). Tranzor будет отправлять POST-запросы на этот URL при каждом событии.
+
+## События
+
+| Событие | Описание |
+|---------|----------|
+| `invoice.paid` | Инвойс оплачен, транзакция подтверждена |
+| `invoice.expired` | Истёк срок ожидания оплаты |
+
+## Формат вебхука
+
+```json
+{
+  "event": "invoice.paid",
+  "invoiceId": "inv_abc123",
+  "orderId": "order-1234",
+  "amountUsd": 1050,
+  "status": "PAID",
+  "paidChain": "tron:USDT",
+  "paidAmount": "10500000",
+  "timestamp": "2025-01-01T00:05:00Z"
+}
+```
+
+<Note>
+  Поле `amountUsd` указано в **центах**. Значение `1050` = $10.50.
+</Note>
+
+## Проверка подписи
+
+Каждый вебхук подписан HMAC-SHA256. Подпись передаётся в заголовке `X-Tranzor-Signature`.
+
+Строка для проверки — это **сырое тело запроса** (raw body). Ключ — ваш `webhookSecret`.
+
+<CodeGroup>
+```javascript Node.js
+import crypto from 'crypto';
+
+function verifyWebhook(rawBody, signature, webhookSecret) {
+  const expected = crypto
+    .createHmac('sha256', webhookSecret)
+    .update(rawBody)
+    .digest('hex');
+
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expected)
+  );
+}
+
+// В Express:
+app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+  const signature = req.headers['x-tranzor-signature'];
+
+  if (!verifyWebhook(req.body, signature, process.env.WEBHOOK_SECRET)) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  const event = JSON.parse(req.body);
+  // Обработка события...
+
+  res.status(200).send('OK');
+});
+```
+
+```python Python
+import hmac
+import hashlib
+
+def verify_webhook(raw_body: bytes, signature: str, webhook_secret: str) -> bool:
+    expected = hmac.new(
+        webhook_secret.encode(),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+
+    return hmac.compare_digest(signature, expected)
+```
+
+```php PHP
+function verifyWebhook($rawBody, $signature, $webhookSecret) {
+    $expected = hash_hmac('sha256', $rawBody, $webhookSecret);
+    return hash_equals($expected, $signature);
+}
+
+// Использование:
+$rawBody = file_get_contents('php://input');
+$signature = $_SERVER['HTTP_X_TRANZOR_SIGNATURE'] ?? '';
+
+if (!verifyWebhook($rawBody, $signature, $webhookSecret)) {
+    http_response_code(401);
+    exit('Invalid signature');
+}
+
+$event = json_decode($rawBody, true);
+// Обработка события...
+```
+</CodeGroup>
+
+<Warning>
+  Всегда используйте timing-safe сравнение (`timingSafeEqual`, `compare_digest`, `hash_equals`) для проверки подписи, чтобы защититься от timing-атак.
+</Warning>
+
+## Рекомендации
+
+- **Отвечайте 200** — Tranzor ожидает HTTP 200 в течение 10 секунд. При другом ответе вебхук будет повторён.
+- **Идемпотентность** — вебхук может быть доставлен более одного раза. Используйте `invoiceId` как ключ идемпотентности.
+- **Проверяйте подпись** — никогда не обрабатывайте вебхук без проверки подписи.
+- **Проверяйте статус** — после получения вебхука можно дополнительно запросить статус инвойса через GET `/api/v1/invoices/{invoiceId}`.
