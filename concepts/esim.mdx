@@ -1,26 +1,183 @@
 ---
 title: "eSIM ресселинг"
-description: "Продавайте eSIM через Tranzor API"
+description: "Продавайте eSIM через Tranzor API с оплатой криптовалютой"
 ---
 
-Tranzor позволяет продавать eSIM через API. Вы получаете доступ к тарифам для 150+ стран, а ваши клиенты получают мгновенную активацию через QR-код.
+Tranzor позволяет продавать eSIM через API. Вы получаете доступ к тарифам для 150+ стран, клиент оплачивает криптовалютой, а eSIM активируется автоматически после подтверждения платежа.
 
 ## Как это работает
 
 <Steps>
   <Step title="Получите список тарифов">
-    Запросите `GET /api/v1/esim` — вы получите тарифы по странам с ценами в USD. Можно фильтровать по стране или искать по названию.
+    Запросите `GET /api/v1/esim` — вы получите тарифы по странам с ценами в USD. Можно фильтровать по стране (`country=DE`) или искать по названию (`search=Germany`).
   </Step>
-  <Step title="Оформите заказ">
-    Отправьте `POST /api/v1/esim/order` с `planId` выбранного тарифа. Баланс спишется автоматически.
+  <Step title="Создайте заказ">
+    Отправьте `POST /api/v1/esim/order` с `planId` выбранного тарифа. В ответе вы получите `payUrl`, адреса для крипто-оплаты и `orderId` для отслеживания. Статус заказа — `pending`.
+  </Step>
+  <Step title="Клиент оплачивает">
+    Перенаправьте клиента на `payUrl` или покажите адреса из `addresses` в своём интерфейсе. Клиент оплачивает криптовалютой (USDT, ETH и др.).
+  </Step>
+  <Step title="eSIM активируется автоматически">
+    После подтверждения платежа система автоматически создаёт eSIM. Статус заказа меняется: `pending` → `provisioning` → `active`.
   </Step>
   <Step title="Отдайте QR-код клиенту">
-    В ответе вы получите `qrcode` (LPA activation code) и `qrImage` (Base64 PNG). Клиент сканирует QR и eSIM устанавливается на устройство.
+    Когда `status` = `active`, в ответе `GET /api/v1/esim/{orderId}` появятся `qrcode` (LPA строка), `qrImage` (Base64 PNG) и `iosTapLink`. Клиент сканирует QR и eSIM устанавливается на устройство.
   </Step>
   <Step title="Отслеживайте использование">
-    Через `GET /api/v1/esim/{orderId}` можно получить live-данные об использовании трафика: сколько осталось, сколько потрачено, когда истекает.
+    Через `GET /api/v1/esim/{orderId}` можно получить live-данные: сколько трафика осталось, сколько использовано, когда истекает.
   </Step>
 </Steps>
+
+## Статусы заказа
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: POST /esim/order
+    pending --> provisioning: Оплата получена
+    provisioning --> active: eSIM активирован
+    pending --> failed: Таймаут оплаты
+    provisioning --> failed: Ошибка активации
+```
+
+| Статус | Описание |
+|--------|----------|
+| `pending` | Заказ создан, ожидает оплаты инвойса |
+| `provisioning` | Оплата получена, eSIM создаётся |
+| `active` | eSIM готов — QR-код и ICCID доступны |
+| `failed` | Ошибка: таймаут оплаты или сбой активации |
+
+## Пример: полный флоу
+
+### 1. Выбор тарифа
+
+```bash
+curl -H "Authorization: Bearer trz_your_key" \
+  "https://sand.tranzor.io/api/v1/esim?country=DE"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "countries": [{
+      "country": "Германия",
+      "countryIso": "DE",
+      "plans": [{
+        "id": "plan_de_5gb_30d",
+        "dataGb": "5",
+        "days": 30,
+        "priceUsd": 12.50,
+        "operators": "T-Mobile, Vodafone"
+      }]
+    }]
+  }
+}
+```
+
+### 2. Создание заказа
+
+```bash
+curl -X POST https://sand.tranzor.io/api/v1/esim/order \
+  -H "Authorization: Bearer trz_your_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "planId": "plan_de_5gb_30d",
+    "clientEmail": "user@example.com",
+    "clientRef": "my-order-123"
+  }'
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "orderId": "esim_abc123",
+    "status": "pending",
+    "invoiceId": "inv_xyz789",
+    "payUrl": "https://pay.tranzor.io/inv_xyz789",
+    "amount": 12.50,
+    "currency": "USD",
+    "plan": {
+      "country": "Германия",
+      "countryIso": "DE",
+      "dataGb": "5",
+      "days": 30
+    },
+    "addresses": [
+      {
+        "chain": "tron",
+        "address": "TXyz...",
+        "expectedAmount": "12500000",
+        "isToken": true,
+        "tokenSymbol": "USDT"
+      }
+    ],
+    "expiresAt": "2025-01-01T01:00:00Z"
+  }
+}
+```
+
+### 3. Polling статуса после оплаты
+
+```bash
+curl -H "Authorization: Bearer trz_your_key" \
+  "https://sand.tranzor.io/api/v1/esim/esim_abc123"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "orderId": "esim_abc123",
+    "status": "active",
+    "plan": { "country": "Германия", "dataGb": "5", "days": 30 },
+    "esim": {
+      "iccid": "8949...",
+      "qrcode": "LPA:1$...",
+      "qrImage": "data:image/png;base64,...",
+      "iosTapLink": "https://esimsetup.apple.com/esim_dep..."
+    },
+    "liveData": {
+      "dataLeftMb": 5120,
+      "dataPackageMb": 5120,
+      "dataUsedMb": 0,
+      "expiresAt": "2025-01-31T00:00:00Z",
+      "statusQr": "installed"
+    }
+  }
+}
+```
+
+<Note>
+  Поле `esim` доступно **только** когда `status` = `active`. При других статусах оно будет `null`.
+</Note>
+
+## Параметры заказа
+
+| Поле | Обязательное | Описание |
+|------|:---:|----------|
+| `planId` | да | ID тарифа из `GET /api/v1/esim` |
+| `clientEmail` | нет | Email клиента — получит уведомление об активации |
+| `clientRef` | нет | Ваш внутренний ID заказа (используется как `orderId` инвойса) |
+
+## Данные eSIM (при status=active)
+
+| Поле | Описание |
+|------|----------|
+| `iccid` | Уникальный ID SIM-карты |
+| `qrcode` | LPA activation string — для программной активации |
+| `qrImage` | Base64 PNG — QR-код для сканирования камерой |
+| `iosTapLink` | Ссылка для установки на iOS в один тап |
+
+## Live-данные
+
+| Поле | Описание |
+|------|----------|
+| `dataLeftMb` | Остаток трафика в МБ |
+| `dataPackageMb` | Полный объём пакета в МБ |
+| `dataUsedMb` | Использовано МБ |
+| `expiresAt` | Дата истечения тарифа |
+| `statusQr` | Статус QR: `not_installed`, `installed`, `expired` |
 
 ## Поддерживаемые устройства
 
@@ -30,58 +187,3 @@ eSIM поддерживается на большинстве современн
 - **iPad** — Pro (3-го поколения и новее), Air (3-го поколения и новее), Mini (5-го поколения и новее)
 - **Samsung** — Galaxy S20 и новее, Galaxy Z Fold/Flip
 - **Google Pixel** — 3a и новее
-
-<Note>
-  Полный список совместимых устройств возвращается в ответе `GET /api/v1/esim` в поле `supportedDevices`.
-</Note>
-
-## Тариф
-
-Каждый тариф содержит:
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `id` | string | ID тарифа для покупки |
-| `dataGb` | string | Объём данных в ГБ |
-| `days` | integer | Срок действия в днях |
-| `priceUsd` | number | Цена в USD |
-| `operators` | string | Операторы в стране |
-
-## Заказ eSIM
-
-После покупки вы получаете:
-
-| Поле | Описание |
-|------|----------|
-| `orderId` | ID заказа |
-| `status` | `pending` → `active` → `expired` / `failed` |
-| `esim.iccid` | Уникальный ID SIM-карты |
-| `esim.qrcode` | LPA activation code (строка для программной активации) |
-| `esim.qrImage` | Base64 PNG — QR-код для сканирования |
-| `esim.iosTapLink` | Ссылка для установки на iOS в один тап |
-| `esim.dataLeftMb` | Остаток трафика в МБ |
-| `esim.expiresAt` | Дата истечения |
-
-## Live-данные
-
-Через эндпоинт `GET /api/v1/esim/{orderId}` можно получить актуальные данные об использовании:
-
-```json
-{
-  "liveData": {
-    "dataLeftMb": 3200,
-    "dataPackageMb": 5120,
-    "dataUsedMb": 1920,
-    "expiresAt": "2025-02-15T00:00:00Z",
-    "statusQr": "installed"
-  }
-}
-```
-
-| Поле | Описание |
-|------|----------|
-| `dataLeftMb` | Остаток трафика в МБ |
-| `dataPackageMb` | Полный объём пакета в МБ |
-| `dataUsedMb` | Использовано МБ |
-| `expiresAt` | Дата истечения тарифа |
-| `statusQr` | Статус QR: `not_installed`, `installed`, `expired` |

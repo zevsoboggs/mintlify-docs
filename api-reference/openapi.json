@@ -236,8 +236,8 @@
     },
     "/api/v1/esim/order": {
       "post": {
-        "summary": "Купить eSIM",
-        "description": "Покупает eSIM и активирует выбранный тариф. Возвращает QR-код для установки.",
+        "summary": "Заказать eSIM",
+        "description": "Создаёт заказ eSIM и платёжный инвойс. **eSIM активируется автоматически после оплаты.**\n\nФлоу:\n1. Вызовите POST — получите `payUrl` и адреса для оплаты\n2. Клиент оплачивает инвойс криптовалютой\n3. Система автоматически обнаруживает платёж и активирует eSIM\n4. Проверяйте статус через GET /api/v1/esim/{orderId}\n5. Когда `status` = `active` — QR-код и ICCID доступны в ответе",
         "operationId": "orderEsim",
         "tags": ["eSIM"],
         "requestBody": {
@@ -247,14 +247,14 @@
             "required": ["planId"],
             "properties": {
               "planId": { "type": "string", "description": "ID тарифа из GET /api/v1/esim" },
-              "clientEmail": { "type": "string", "format": "email", "description": "Email клиента (опционально)" },
-              "clientRef": { "type": "string", "description": "Ваш внутренний ID (опционально)" }
+              "clientEmail": { "type": "string", "format": "email", "description": "Email клиента для уведомлений (опционально)" },
+              "clientRef": { "type": "string", "description": "Ваш внутренний ID заказа (опционально, используется как orderId инвойса)" }
             }
           }}}
         },
         "responses": {
           "200": {
-            "description": "eSIM активирован",
+            "description": "Заказ создан, ожидает оплаты",
             "content": { "application/json": { "schema": {
               "type": "object",
               "properties": {
@@ -262,21 +262,37 @@
                 "data": {
                   "type": "object",
                   "properties": {
-                    "orderId": { "type": "string" },
-                    "status": { "type": "string", "example": "active" },
-                    "plan": { "type": "object" },
-                    "esim": {
+                    "orderId": { "type": "string", "description": "ID заказа eSIM для отслеживания" },
+                    "status": { "type": "string", "example": "pending", "description": "pending → provisioning → active" },
+                    "invoiceId": { "type": "string", "description": "ID платёжного инвойса" },
+                    "payUrl": { "type": "string", "format": "uri", "description": "Ссылка на страницу оплаты для клиента" },
+                    "amount": { "type": "number", "example": 12.50 },
+                    "currency": { "type": "string", "example": "USD" },
+                    "plan": {
                       "type": "object",
                       "properties": {
-                        "iccid": { "type": "string" },
-                        "qrcode": { "type": "string", "description": "LPA activation code" },
-                        "qrImage": { "type": "string", "nullable": true, "description": "Base64 PNG QR image" },
-                        "iosTapLink": { "type": "string", "nullable": true, "description": "iOS direct install link" },
-                        "dataLeftMb": { "type": "number" },
-                        "dataPackageMb": { "type": "number" },
-                        "expiresAt": { "type": "string", "nullable": true }
+                        "country": { "type": "string" },
+                        "countryIso": { "type": "string" },
+                        "dataGb": { "type": "string" },
+                        "days": { "type": "integer" }
                       }
-                    }
+                    },
+                    "addresses": {
+                      "type": "array",
+                      "description": "Адреса для оплаты криптовалютой",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "chain": { "type": "string", "example": "tron" },
+                          "address": { "type": "string" },
+                          "expectedAmount": { "type": "string" },
+                          "isToken": { "type": "boolean" },
+                          "tokenSymbol": { "type": "string", "nullable": true }
+                        }
+                      }
+                    },
+                    "expiresAt": { "type": "string", "format": "date-time", "description": "Срок оплаты" },
+                    "note": { "type": "string" }
                   }
                 }
               }
@@ -305,7 +321,7 @@
     "/api/v1/esim/{orderId}": {
       "get": {
         "summary": "Детали eSIM заказа",
-        "description": "Возвращает детали заказа с live данными об использовании трафика.",
+        "description": "Возвращает детали заказа. Используйте для polling статуса после оплаты.\n\nСтатусы:\n- `pending` — ожидает оплаты инвойса\n- `provisioning` — оплата получена, eSIM создаётся\n- `active` — eSIM активирован, QR-код и ICCID доступны в `esim`\n- `failed` — ошибка активации\n\nКогда `status` = `active`, поле `liveData` содержит актуальные данные об использовании трафика.",
         "operationId": "getEsimOrder",
         "tags": ["eSIM"],
         "parameters": [
@@ -322,9 +338,19 @@
                   "type": "object",
                   "properties": {
                     "orderId": { "type": "string" },
-                    "status": { "type": "string" },
-                    "plan": { "type": "object" },
-                    "esim": { "type": "object" },
+                    "status": { "type": "string", "enum": ["pending", "provisioning", "active", "failed"], "description": "pending=ожидает оплаты, active=eSIM готов" },
+                    "plan": { "type": "object", "description": "Детали тарифа: country, dataGb, days, priceUsd" },
+                    "esim": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Данные eSIM (доступны только когда status=active)",
+                      "properties": {
+                        "iccid": { "type": "string" },
+                        "qrcode": { "type": "string", "description": "LPA activation string" },
+                        "qrImage": { "type": "string", "nullable": true, "description": "Base64 QR-код PNG" },
+                        "iosTapLink": { "type": "string", "nullable": true, "description": "iOS прямая установка" }
+                      }
+                    },
                     "liveData": {
                       "type": "object",
                       "nullable": true,
