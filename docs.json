@@ -26,6 +26,7 @@
             "group": "Концепции",
             "pages": [
               "concepts/invoices",
+              "concepts/widget",
               "concepts/esim",
               "concepts/webhooks"
             ]
