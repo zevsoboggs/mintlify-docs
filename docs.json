@@ -26,6 +26,7 @@
             "group": "Концепции",
             "pages": [
               "concepts/invoices",
+              "concepts/esim",
               "concepts/webhooks"
             ]
           }
@@ -47,6 +48,15 @@
               "api-reference/endpoint/get-invoice",
               "api-reference/endpoint/list-invoices",
               "api-reference/endpoint/cancel-invoice"
+            ]
+          },
+          {
+            "group": "eSIM",
+            "pages": [
+              "api-reference/endpoint/list-esim-plans",
+              "api-reference/endpoint/order-esim",
+              "api-reference/endpoint/list-esim-orders",
+              "api-reference/endpoint/get-esim-order"
             ]
           },
           {

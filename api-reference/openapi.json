@@ -1,13 +1,17 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Tranzor Acquiring API",
-    "description": "API для приёма криптовалютных платежей. Создавайте инвойсы, отслеживайте статусы и получайте вебхуки о платежах.",
+    "title": "Tranzor API",
+    "description": "API для приёма криптовалютных платежей и ресселинга eSIM. Создавайте инвойсы, продавайте eSIM, отслеживайте статусы.",
     "version": "1.0.0",
     "contact": {
       "name": "Tranzor Support",
       "url": "https://tranzor.io"
     }
+  },
+  "externalDocs": {
+    "description": "Полная документация",
+    "url": "https://docs.tranzor.io/"
   },
   "servers": [
     {
@@ -171,6 +175,174 @@
           "400": { "$ref": "#/components/responses/BadRequest" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/esim": {
+      "get": {
+        "summary": "Список eSIM тарифов",
+        "description": "Возвращает список доступных eSIM тарифов, сгруппированных по странам. Цены указаны в USD.",
+        "operationId": "listEsimPlans",
+        "tags": ["eSIM"],
+        "parameters": [
+          { "name": "country", "in": "query", "schema": { "type": "string" }, "description": "Фильтр по ISO2 коду страны (например US, DE, TR)" },
+          { "name": "search", "in": "query", "schema": { "type": "string" }, "description": "Поиск по названию страны" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список тарифов",
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "countries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "country": { "type": "string", "example": "Германия" },
+                          "countryEn": { "type": "string", "example": "Germany" },
+                          "countryIso": { "type": "string", "example": "DE" },
+                          "flag": { "type": "string", "format": "uri" },
+                          "plans": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": { "type": "string" },
+                                "dataGb": { "type": "string", "example": "5" },
+                                "days": { "type": "integer", "example": 30 },
+                                "priceUsd": { "type": "number", "example": 12.50 },
+                                "operators": { "type": "string" }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "totalPlans": { "type": "integer" },
+                    "supportedDevices": { "type": "array", "items": { "type": "object" } }
+                  }
+                }
+              }
+            }}}
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/esim/order": {
+      "post": {
+        "summary": "Купить eSIM",
+        "description": "Покупает eSIM и активирует выбранный тариф. Возвращает QR-код для установки.",
+        "operationId": "orderEsim",
+        "tags": ["eSIM"],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["planId"],
+            "properties": {
+              "planId": { "type": "string", "description": "ID тарифа из GET /api/v1/esim" },
+              "clientEmail": { "type": "string", "format": "email", "description": "Email клиента (опционально)" },
+              "clientRef": { "type": "string", "description": "Ваш внутренний ID (опционально)" }
+            }
+          }}}
+        },
+        "responses": {
+          "200": {
+            "description": "eSIM активирован",
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "orderId": { "type": "string" },
+                    "status": { "type": "string", "example": "active" },
+                    "plan": { "type": "object" },
+                    "esim": {
+                      "type": "object",
+                      "properties": {
+                        "iccid": { "type": "string" },
+                        "qrcode": { "type": "string", "description": "LPA activation code" },
+                        "qrImage": { "type": "string", "nullable": true, "description": "Base64 PNG QR image" },
+                        "iosTapLink": { "type": "string", "nullable": true, "description": "iOS direct install link" },
+                        "dataLeftMb": { "type": "number" },
+                        "dataPackageMb": { "type": "number" },
+                        "expiresAt": { "type": "string", "nullable": true }
+                      }
+                    }
+                  }
+                }
+              }
+            }}}
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "get": {
+        "summary": "Список заказов eSIM",
+        "description": "Возвращает ваши заказы eSIM с пагинацией.",
+        "operationId": "listEsimOrders",
+        "tags": ["eSIM"],
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 100 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["pending", "active", "failed"] } }
+        ],
+        "responses": {
+          "200": { "description": "Список заказов" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/esim/{orderId}": {
+      "get": {
+        "summary": "Детали eSIM заказа",
+        "description": "Возвращает детали заказа с live данными об использовании трафика.",
+        "operationId": "getEsimOrder",
+        "tags": ["eSIM"],
+        "parameters": [
+          { "name": "orderId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Детали заказа",
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "properties": {
+                "success": { "type": "boolean" },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "orderId": { "type": "string" },
+                    "status": { "type": "string" },
+                    "plan": { "type": "object" },
+                    "esim": { "type": "object" },
+                    "liveData": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "dataLeftMb": { "type": "number" },
+                        "dataPackageMb": { "type": "number" },
+                        "dataUsedMb": { "type": "number" },
+                        "expiresAt": { "type": "string", "nullable": true },
+                        "statusQr": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }}}
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
